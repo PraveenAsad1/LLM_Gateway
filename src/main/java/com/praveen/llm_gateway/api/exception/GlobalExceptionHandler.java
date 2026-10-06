@@ -40,6 +40,18 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Handles Spring Security AccessDeniedException for method-level security.
+     */
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(org.springframework.security.access.AccessDeniedException ex) {
+        ErrorResponse error = new ErrorResponse(
+                "Forbidden",
+                "You do not have permission to access this resource."
+        );
+        return new ResponseEntity<>(error, HttpStatus.FORBIDDEN);
+    }
+
+    /**
      * Fallback for any uncaught runtime exception – maps to 500 Internal Server Error.
      */
     @ExceptionHandler(RuntimeException.class)

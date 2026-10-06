@@ -30,6 +30,12 @@ public class ProviderConfig {
     @Value("${gateway.openai.model:gpt-4o-mini}") private String openAiModel;
     @Value("${gateway.openai.timeout-seconds:30}") private int openAiTimeout;
 
+    // ── Groq settings ──────────────────────────────────────────────────────────
+    @Value("${gateway.groq.api-key:}") private String groqKey;
+    @Value("${gateway.groq.base-url:https://api.groq.com/openai/v1}") private String groqBaseUrl;
+    @Value("${gateway.groq.model:qwen/qwen3.8-27b}") private String groqModel;
+    @Value("${gateway.groq.timeout-seconds:30}") private int groqTimeout;
+
     // ── Anthropic settings ─────────────────────────────────────────────────────
     @Value("${gateway.anthropic.api-key:}") private String anthropicKey;
     @Value("${gateway.anthropic.base-url:https://api.anthropic.com/v1}") private String anthropicBaseUrl;
@@ -39,13 +45,13 @@ public class ProviderConfig {
 
     @Bean
     public LlmProvider primaryProvider() {
-        if (openAiKey != null && !openAiKey.isBlank()) {
-            log.info("[ProviderConfig] Primary provider: OpenAI (model={})", openAiModel);
-            return new OpenAiProvider(openAiBaseUrl, openAiKey, openAiModel,
-                    Duration.ofSeconds(openAiTimeout));
+        if (groqKey != null && !groqKey.isBlank()) {
+            log.info("[ProviderConfig] Primary provider: Groq (model={})", groqModel);
+            return new com.praveen.llm_gateway.provider.GroqProvider(groqBaseUrl, groqKey, groqModel,
+                    Duration.ofSeconds(groqTimeout));
         }
-        log.warn("[ProviderConfig] OPENAI_API_KEY not set — primary provider uses mock");
-        return new MockLlmProvider("openai-mock", false);
+        log.warn("[ProviderConfig] GROQ_API_KEY not set — primary provider uses mock");
+        return new MockLlmProvider("groq-mock", false);
     }
 
     @Bean

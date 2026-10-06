@@ -1,6 +1,13 @@
 # LLM Gateway
 
-A production-ready **Spring Boot 4** API gateway that routes chat completion requests to multiple LLM providers (OpenAI, Anthropic) with automatic failover, token-bucket rate limiting, and request logging.
+A **Spring Boot 4** API gateway that routes chat completion requests to
+multiple LLM providers (OpenAI, Anthropic) with automatic failover,
+rate limiting, and request logging.
+
+This is a backend engineering portfolio project — built to demonstrate
+distributed-systems fundamentals (routing, resilience, fairness) applied
+to LLM provider calls, not a finished production system. See **What's
+Not Here Yet** below for an honest account of scope.
 
 ---
 
@@ -42,14 +49,33 @@ flowchart TD
 
 ## Features
 
-| Feature | Details |
-|---|---|
-| **Failover routing** | Automatically retries backup provider when primary throws `ProviderUnavailableException` |
-| **Token-bucket rate limiting** | 20-token burst capacity, refills at 5 tokens/sec (configurable) |
-| **Real LLM providers** | OpenAI Chat Completions API & Anthropic Messages API via Spring `RestClient` |
-| **Mock providers** | Safe fallback when API keys are not configured — app always starts |
-| **Request logging** | Every request logged with method, URI, remote IP, HTTP status, and latency |
-| **Global error handling** | Clean JSON error responses: `503` (providers down), `429` (rate limited), `500` (unexpected) |
+| Feature                        | Details                                                                                      |
+| ------------------------------ | -------------------------------------------------------------------------------------------- |
+| **Failover routing**           | Automatically retries backup provider when primary throws `ProviderUnavailableException`     |
+| **Token-bucket rate limiting** | 20-token burst capacity, refills at 5 tokens/sec (configurable)                              |
+| **Real LLM providers**         | OpenAI Chat Completions API & Anthropic Messages API via Spring `RestClient`                 |
+| **Mock providers**             | Safe fallback when API keys are not configured — app always starts                           |
+| **Request logging**            | Every request logged with method, URI, remote IP, HTTP status, and latency                   |
+| **Global error handling**      | Clean JSON error responses: `503` (providers down), `429` (rate limited), `500` (unexpected) |
+
+---
+
+## What's Not Here Yet (and why)
+
+Being upfront about scope boundaries rather than overstating what's built:
+
+| Missing piece | Why it's not here | What it would take |
+|---|---|---|
+| **Cache eviction** | The rate limiter's `ConcurrentHashMap` grows unbounded as new API keys are seen. Stale keys are never removed, which is fine for a portfolio project but a memory leak in production. | Replacing `ConcurrentHashMap` with a caching library like Caffeine to evict keys based on TTL or size. |
+| **Auth Scoping** | For simplicity, users own exactly one API key. Real systems would support one-to-many or team-based key ownership. | A relational table linking multiple keys to a user/tenant. |
+| **Failed requests are not logged** | The cost tracker only persists successful provider calls. Requests that fail entirely (e.g. 503) or rate-limit rejections (429) are completely unrecorded. | Modifying the global exception handler and rate limiter to push failure events down to the async logger. |
+| **Admin/user dashboard** | No UI exists yet — usage data is only visible via raw API response. | A small React dashboard once cost persistence exists underneath it. |
+| **In-memory usage aggregation** | `GET /api/usage/summary` pulls all `RequestLog` rows into memory via `findAll()` and sums them using Java Streams. This will OOM at scale. | Moving the SUM/GROUP BY logic down into JPA `@Query` or native SQL. |
+| **Horizontal scaling** | Rate limiting is in-memory and per-instance — running two gateway instances would not share rate-limit state, so a client could exceed their real limit by hitting different instances. | Redis-backed token buckets shared across instances. |
+
+This list is deliberate, not an oversight — each row reflects a scoping
+decision made to keep the project finishable, not a gap discovered after
+the fact.
 
 ---
 
@@ -101,21 +127,21 @@ src/main/java/com/praveen/llm_gateway/
 
 ### 1. Clone & configure
 
-```bash
+```
 git clone https://github.com/PraveenAsad1/LLM_Gateway.git
 cd LLM_Gateway
 ```
 
 Set your API keys as environment variables (optional — mocks are used if absent):
 
-```bash
+```
 export OPENAI_API_KEY=sk-...
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
 ### 2. Run
 
-```bash
+```
 ./mvnw spring-boot:run
 ```
 
@@ -123,7 +149,7 @@ The server starts on **http://localhost:8080**.
 
 ### 3. Send a request
 
-```bash
+```
 curl -X POST http://localhost:8080/api/chat \
   -H "Content-Type: application/json" \
   -d '{
@@ -134,6 +160,7 @@ curl -X POST http://localhost:8080/api/chat \
 ```
 
 **Success response (200):**
+
 ```json
 {
   "content": "REST uses fixed endpoints...",
@@ -144,6 +171,7 @@ curl -X POST http://localhost:8080/api/chat \
 ```
 
 **Rate limit response (429):**
+
 ```json
 {
   "error": "Too Many Requests",
@@ -152,6 +180,7 @@ curl -X POST http://localhost:8080/api/chat \
 ```
 
 **All providers down (503):**
+
 ```json
 {
   "error": "Service Unavailable",
@@ -186,14 +215,14 @@ gateway.anthropic.version=2023-06-01
 
 ## Tech Stack
 
-| Technology | Version | Purpose |
-|---|---|---|
-| Spring Boot | 4.1.1 | Application framework |
-| Spring Web (Tomcat) | 6.x | REST API + Servlet filter |
-| Spring `RestClient` | 6.1+ | HTTP calls to LLM providers |
-| Java Records | 16+ | Immutable DTOs |
-| SLF4J / Logback | — | Structured logging |
-| Maven Wrapper | — | Build tooling |
+| Technology          | Version | Purpose                     |
+| ------------------- | ------- | --------------------------- |
+| Spring Boot         | 4.1.1   | Application framework       |
+| Spring Web (Tomcat) | 6.x     | REST API + Servlet filter   |
+| Spring `RestClient` | 6.1+    | HTTP calls to LLM providers |
+| Java Records        | 16+     | Immutable DTOs              |
+| SLF4J / Logback     | —       | Structured logging          |
+| Maven Wrapper       | —       | Build tooling               |
 
 ---
 
