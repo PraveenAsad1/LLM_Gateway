@@ -13,21 +13,20 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * LlmProvider implementation that calls the real OpenAI Chat Completions API.
+ * LlmProvider implementation that calls the real Groq API.
  *
- * <p>Uses Spring's {@link RestClient} (available since Spring 6.1 / Boot 3.2).
- * If the API key is blank the provider immediately throws
- * {@link ProviderUnavailableException} so the failover router can try backup.</p>
+ * <p>Groq is fully OpenAI-compatible, so this uses the exact same request/response
+ * structure as OpenAI, just pointed to the Groq base URL.</p>
  */
-public class OpenAiProvider implements LlmProvider {
+public class GroqProvider implements LlmProvider {
 
-    private static final Logger log = LoggerFactory.getLogger(OpenAiProvider.class);
+    private static final Logger log = LoggerFactory.getLogger(GroqProvider.class);
 
     private final String apiKey;
     private final String model;
     private final RestClient restClient;
 
-    public OpenAiProvider(String baseUrl, String apiKey, String model, Duration timeout) {
+    public GroqProvider(String baseUrl, String apiKey, String model, Duration timeout) {
         this.apiKey = apiKey;
         this.model  = model;
         this.restClient = RestClient.builder()
@@ -39,45 +38,46 @@ public class OpenAiProvider implements LlmProvider {
     @Override
     public GatewayResponse call(GatewayRequest request) {
         if (apiKey == null || apiKey.isBlank()) {
-            throw new ProviderUnavailableException("OpenAI API key not configured");
+            throw new ProviderUnavailableException("Groq API key not configured");
         }
 
-        log.info("[OpenAI] Sending request for model={}", model);
+        log.info("[Groq] Sending request for model={}", model);
 
-        // Build the request payload
+        // Build the request payload (identical to OpenAI)
         Map<String, Object> body = Map.of(
                 "model", model,
-                "messages", List.of(Map.of("role", "user", "content", request.prompt()))
+                "messages", List.of(Map.of("role", "user", "content", request.prompt())),
+                "max_tokens", 900
         );
 
-        OpenAiResponse response;
+        GroqResponse response;
         try {
             response = restClient.post()
                     .uri("/chat/completions")
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
                     .body(body)
                     .retrieve()
-                    .body(OpenAiResponse.class);
+                    .body(GroqResponse.class);
         } catch (Exception ex) {
-            log.error("[OpenAI] Request failed: {}", ex.getMessage());
-            throw new ProviderUnavailableException("OpenAI request failed: " + ex.getMessage());
+            log.error("[Groq] Request failed: {}", ex.getMessage());
+            throw new ProviderUnavailableException("Groq request failed: " + ex.getMessage());
         }
 
         if (response == null || response.choices() == null || response.choices().isEmpty()) {
-            throw new ProviderUnavailableException("OpenAI returned an empty response");
+            throw new ProviderUnavailableException("Groq returned an empty response");
         }
 
         String content = response.choices().get(0).message().content();
         int promptTokens     = response.usage() != null ? response.usage().promptTokens()     : 0;
         int completionTokens = response.usage() != null ? response.usage().completionTokens() : 0;
 
-        log.info("[OpenAI] Response received, promptTokens={}, completionTokens={}", promptTokens, completionTokens);
-        return new GatewayResponse(content, "openai/" + model, promptTokens, completionTokens);
+        log.info("[Groq] Response received, promptTokens={}, completionTokens={}", promptTokens, completionTokens);
+        return new GatewayResponse(content, "groq/" + model, promptTokens, completionTokens);
     }
 
-    // ── Internal response records ─────────────────────────────────────────────
+    // ── Internal response records (Identical to OpenAI) ──────────────────────
 
-    record OpenAiResponse(List<Choice> choices, Usage usage) {}
+    record GroqResponse(List<Choice> choices, Usage usage) {}
 
     record Choice(Message message) {}
 
